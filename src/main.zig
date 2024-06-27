@@ -4,9 +4,7 @@ const c = @cImport({
 });
 
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-
+    c.SetTraceLogLevel(c.LOG_WARNING);
     c.InitWindow(800, 600, "Window");
     defer c.CloseWindow();
     c.SetTargetFPS(60);
