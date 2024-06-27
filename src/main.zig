@@ -22,3 +22,9 @@ test "simple test" {
     try list.append(42);
     try std.testing.expectEqual(@as(i32, 42), list.pop());
 }
+
+comptime {
+    const refAllDecls = std.testing.refAllDecls;
+
+    refAllDecls(@import("md.zig"));
+}
