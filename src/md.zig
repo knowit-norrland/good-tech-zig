@@ -1,28 +1,28 @@
 const std = @import("std");
 
-const Root = struct {
+pub const Root = struct {
     nodes: []const Node,
 
-    fn deinit(self: Root, ally: std.mem.Allocator) void {
+    pub fn deinit(self: Root, ally: std.mem.Allocator) void {
         ally.free(self.nodes);
     }
 };
 
-const Node = union(enum) {
+pub const Node = union(enum) {
     text: Text,
     header: Header,
 };
 
-const Text = struct {
+pub const Text = struct {
     value: []const u8,
 };
 
-const Header = struct {
+pub const Header = struct {
     value: []const u8,
     level: u32,
 };
 
-fn parse(source: []const u8, ally: std.mem.Allocator) !Root {
+pub fn parse(source: []const u8, ally: std.mem.Allocator) !Root {
     var children = std.ArrayList(Node).init(ally);
     defer children.deinit();
     var i: usize = 0;
