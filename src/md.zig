@@ -36,7 +36,7 @@ pub fn parse(source: []const u8, ally: std.mem.Allocator) !Root {
     };
 }
 
-fn readText(source : []const u8, index: *usize) Node{
+fn readText(source: []const u8, index: *usize) Node {
     const begin = index.*;
     while (index.* < source.len) : (index.* += 1) {
         switch (source[index.*]) {
