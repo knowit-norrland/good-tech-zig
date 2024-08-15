@@ -5,13 +5,13 @@ pub const Root = struct {
 
     pub fn deinit(self: Root, ally: std.mem.Allocator) void {
         defer ally.free(self.nodes);
-        for(self.nodes) |node| {
+        for (self.nodes) |node| {
             switch (node) {
                 .text, .header => {},
                 .list => |list| {
                     list.deinit(ally);
                 },
-             }
+            }
         }
     }
 };
@@ -19,7 +19,7 @@ pub const Root = struct {
 pub const Node = union(enum) {
     text: Text,
     header: Header,
-    list : List,
+    list: List,
 };
 
 pub const Text = struct {
@@ -31,8 +31,8 @@ pub const Header = struct {
     level: u32,
 };
 pub const List = struct {
-    nodes : []const Node,
-    ordered : bool,
+    nodes: []const Node,
+    ordered: bool,
 
     pub fn deinit(self: List, ally: std.mem.Allocator) void {
         ally.free(self.nodes);
@@ -44,12 +44,11 @@ pub fn parse(source: []const u8, ally: std.mem.Allocator) !Root {
     defer children.deinit();
     var i: usize = 0;
     while (i < source.len) : (i += 1) {
-        if(try parseUnorderedList(source, &i, ally)) |list| {
+        if (try parseUnorderedList(source, &i, ally)) |list| {
             try children.append(list);
         } else {
-            try children.append( readText(source, &i));
+            try children.append(readText(source, &i));
         }
-
     }
 
     return .{
@@ -78,12 +77,12 @@ fn readText(source: []const u8, index: *usize) Node {
         },
     };
 }
-fn parseUnorderedList(source: []const u8, index: *usize, ally: std.mem.Allocator) !?Node{
+fn parseUnorderedList(source: []const u8, index: *usize, ally: std.mem.Allocator) !?Node {
     var list = std.ArrayList(Node).init(ally);
     defer list.deinit();
 
     while (index.* < source.len) : (index.* += 1) {
-        if(source[index.*] != '*') {
+        if (source[index.*] != '*') {
             break;
         }
         index.* += 1;
@@ -92,12 +91,13 @@ fn parseUnorderedList(source: []const u8, index: *usize, ally: std.mem.Allocator
         try list.append(node);
     }
 
-    return if(list.items.len == 0)
+    return if (list.items.len == 0)
         null
-    else .{
+    else
+        .{
             .list = .{
                 .ordered = false,
-                .nodes =  try list.toOwnedSlice(),
+                .nodes = try list.toOwnedSlice(),
             },
         };
 }
@@ -136,10 +136,10 @@ test "parse simple markdown" {
 
 test "parse list" {
     const src =
-    \\* Hej
-    \\* på
-    \\* dig
-   ;
+        \\* Hej
+        \\* på
+        \\* dig
+    ;
 
     const root = try parse(src, std.testing.allocator);
     defer root.deinit(std.testing.allocator);
@@ -147,11 +147,10 @@ test "parse list" {
     try expectEqual(1, root.nodes.len);
 
     switch (root.nodes[0]) {
-        .list => | list | {
+        .list => |list| {
             try expectEqual(3, list.nodes.len);
             try expect(!list.ordered);
         },
         else => try expect(false),
-     }
-
+    }
 }

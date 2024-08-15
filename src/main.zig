@@ -49,6 +49,11 @@ pub fn main() !void {
                 .text => |text| {
                     gui.drawText(text.value, x, y, 32);
                 },
+                .list => |list| {
+                    for (list.nodes) |listnode| {
+                        gui.drawText(listnode.text.value, x, y, 32);
+                    }
+                },
             }
         }
         c.EndDrawing();
