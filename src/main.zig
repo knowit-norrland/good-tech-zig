@@ -6,10 +6,7 @@ const c = @cImport({
 });
 
 pub fn main() !void {
-    var base_allocator = switch (std.debug.runtime_safety) {
-        true => std.heap.GeneralPurposeAllocator(.{}){},
-        false => std.heap.page_allocator,
-    };
+    var base_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(base_allocator.deinit() == .ok);
     const ally = base_allocator.allocator();
 
@@ -36,8 +33,11 @@ pub fn main() !void {
     defer c.CloseWindow();
     c.SetTargetFPS(60);
 
+    gui.init(arena_ally);
+
     while (!c.WindowShouldClose()) {
         c.BeginDrawing();
+        c.ClearBackground(c.BLACK);
         gui.drawRoot(root);
         c.EndDrawing();
     }
