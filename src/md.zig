@@ -20,7 +20,7 @@ pub const Node = union(enum) {
     text: Text,
     header: Header,
     list: List,
-    codeblock : Codeblock,
+    codeblock: Codeblock,
 };
 
 pub const Text = struct {
@@ -32,6 +32,7 @@ pub const Header = struct {
     level: u32,
 };
 pub const List = struct {
+    //TODO: det här kanske räcker med att vara en Text(?)
     nodes: []const Node,
     ordered: bool,
 
@@ -40,8 +41,8 @@ pub const List = struct {
     }
 };
 pub const Codeblock = struct {
-    code : []const u8,
-    language : []const u8,
+    code: []const u8,
+    language: []const u8,
 };
 
 pub fn parse(source: []const u8, ally: std.mem.Allocator) !Root {
@@ -49,10 +50,9 @@ pub fn parse(source: []const u8, ally: std.mem.Allocator) !Root {
     defer children.deinit();
     var i: usize = 0;
     while (i < source.len) : (i += 1) {
-        if(parseCodeBlock(source, &i)) |codeblock| {
+        if (parseCodeBlock(source, &i)) |codeblock| {
             try children.append(codeblock);
-        }
-        else if (try parseUnorderedList(source, &i, ally)) |list| {
+        } else if (try parseUnorderedList(source, &i, ally)) |list| {
             try children.append(list);
         } else {
             try children.append(readText(source, &i));
@@ -131,37 +131,34 @@ fn parseCodeBlock(source: []const u8, index: *usize) ?Node {
 
     if (source.len < 3 + index.*) return null;
 
-    if(!std.mem.eql(u8, source[index.* .. index.* + 3], "```")) return null;
+    if (!std.mem.eql(u8, source[index.* .. index.* + 3], "```")) return null;
     index.* += 3;
     var tempindex = index.*;
 
     var lang: []const u8 = "";
     var code: []const u8 = "";
 
-    while(index.* < source.len) : (index.* += 1) {
-        if(source[index.*] == '\n'){
-            lang = source[tempindex .. index.*];
+    while (index.* < source.len) : (index.* += 1) {
+        if (source[index.*] == '\n') {
+            lang = source[tempindex..index.*];
             index.* += 1;
             break;
         }
     }
     tempindex = index.*;
-    while(index.* + 4 <= source.len) : (index.* += 1) {
-        if(std.mem.eql(u8,source[index.* .. index.*+4],"\n```")){
-            code = source[tempindex .. index.*];
-            index.* +=3;
-            return .{
-                .codeblock = .{
-                    .code = code,
-                    .language = lang,
-                }
-            };
+    while (index.* + 4 <= source.len) : (index.* += 1) {
+        if (std.mem.eql(u8, source[index.* .. index.* + 4], "\n```")) {
+            code = source[tempindex..index.*];
+            index.* += 3;
+            return .{ .codeblock = .{
+                .code = code,
+                .language = lang,
+            } };
         }
     }
     index.* = startindex;
     return null;
 }
-
 
 const expectEqual = std.testing.expectEqual;
 const expect = std.testing.expect;
@@ -214,7 +211,6 @@ test "parse codeblock" {
     switch (root.nodes[0]) {
         .codeblock => {},
         else => unreachable,
-
     }
     try expectEqualString("zig", root.nodes[0].codeblock.language);
     try expectEqualString("var x = u32;", root.nodes[0].codeblock.code);

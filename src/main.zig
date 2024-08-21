@@ -38,24 +38,7 @@ pub fn main() !void {
 
     while (!c.WindowShouldClose()) {
         c.BeginDrawing();
-
-        for (0.., root.nodes) |idx, node| {
-            const x = 32;
-            const y = 32 + 32 * @as(u32, @intCast(idx));
-            switch (node) {
-                .header => |header| {
-                    gui.drawText(header.value, x, y, 32);
-                },
-                .text => |text| {
-                    gui.drawText(text.value, x, y, 32);
-                },
-                .list => |list| {
-                    for (list.nodes) |listnode| {
-                        gui.drawText(listnode.text.value, x, y, 32);
-                    }
-                },
-            }
-        }
+        gui.drawRoot(root);
         c.EndDrawing();
     }
 }
