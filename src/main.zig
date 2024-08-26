@@ -1,9 +1,32 @@
 const std = @import("std");
 const md = @import("md.zig");
 const render = @import("render.zig");
+const builtin = @import("builtin");
 const c = @cImport({
     @cInclude("raylib.h");
 });
+
+//TODO: se över detta
+const md_src = @embedFile("./slide.md");
+
+fn readMarkdown(ally: std.mem.Allocator) !?[]const u8 {
+    if (builtin.target.isWasm()) {
+        return md_src;
+    }
+
+    const args = try std.process.argsAlloc(ally);
+
+    var file: []const u8 = "";
+
+    if (args.len >= 2) {
+        file = args[1];
+    } else {
+        std.debug.print("No file specified, exiting...", .{});
+        return null;
+    }
+
+    return try std.fs.cwd().readFileAlloc(ally, file, 1_000_000_000);
+}
 
 pub fn main() !void {
     var base_allocator = std.heap.GeneralPurposeAllocator(.{}){};
@@ -14,21 +37,12 @@ pub fn main() !void {
     defer arena.deinit();
     const arena_ally = arena.allocator();
 
-    const args = try std.process.argsAlloc(arena_ally);
-
-    var file: []const u8 = "";
-
-    if (args.len >= 2) {
-        file = args[1];
-    } else {
-        std.debug.print("No file specified, exiting...", .{});
-        return;
-    }
-
-    const src = try std.fs.cwd().readFileAlloc(arena_ally, file, 1_000_000_000);
-    const root = try md.parse(src, arena_ally);
+    const src = try readMarkdown(arena_ally);
+    if (src == null) return;
+    const root = try md.parse(src.?, arena_ally);
 
     c.SetTraceLogLevel(c.LOG_WARNING);
+    c.SetConfigFlags(c.FLAG_VSYNC_HINT | c.FLAG_WINDOW_HIGHDPI);
     c.InitWindow(800, 600, "Window");
     defer c.CloseWindow();
     c.SetTargetFPS(60);
