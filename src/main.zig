@@ -1,6 +1,6 @@
 const std = @import("std");
 const md = @import("md.zig");
-const gui = @import("gui.zig");
+const render = @import("render.zig");
 const c = @cImport({
     @cInclude("raylib.h");
 });
@@ -33,13 +33,28 @@ pub fn main() !void {
     defer c.CloseWindow();
     c.SetTargetFPS(60);
 
-    gui.init(arena_ally);
+    var ctx = render.Context.init();
 
     while (!c.WindowShouldClose()) {
+        handleInputs(&ctx, root);
         c.BeginDrawing();
-        c.ClearBackground(c.BLACK);
-        gui.drawRoot(root);
+        render.currentSlide(&ctx, root);
         c.EndDrawing();
+    }
+}
+
+fn handleInputs(ctx: *render.Context, root: md.Root) void {
+    if (c.IsKeyDown(c.KEY_UP)) {
+        ctx.scale = @min(render.Context.max_scale, ctx.scale + 0.02);
+    }
+    if (c.IsKeyDown(c.KEY_DOWN)) {
+        ctx.scale = @max(render.Context.min_scale, ctx.scale - 0.02);
+    }
+    if (c.IsKeyPressed(c.KEY_LEFT)) {
+        render.prevSlide(ctx);
+    }
+    if (c.IsKeyPressed(c.KEY_RIGHT)) {
+        render.nextSlide(ctx, root);
     }
 }
 
@@ -47,4 +62,5 @@ comptime {
     const refAllDecls = std.testing.refAllDecls;
 
     refAllDecls(@import("md.zig"));
+    refAllDecls(@import("render.zig"));
 }

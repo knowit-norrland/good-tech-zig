@@ -1,16 +1,20 @@
 const std = @import("std");
 
 pub const Root = struct {
-    nodes: []const Node,
+    const Nodes = []const Node;
+    slides: []Nodes,
 
     pub fn deinit(self: Root, ally: std.mem.Allocator) void {
-        defer ally.free(self.nodes);
-        for (self.nodes) |node| {
-            switch (node) {
-                .text, .header, .codeblock => {},
-                .list => |list| {
-                    list.deinit(ally);
-                },
+        defer ally.free(self.slides);
+        for (self.slides) |slide| {
+            defer ally.free(slide);
+            for (slide) |node| {
+                switch (node) {
+                    .text, .header, .codeblock => {},
+                    .list => |list| {
+                        list.deinit(ally);
+                    },
+                }
             }
         }
     }
@@ -46,25 +50,34 @@ pub const Codeblock = struct {
 };
 
 pub fn parse(source: []const u8, ally: std.mem.Allocator) !Root {
+    var slides = std.ArrayList([]const Node).init(ally);
+    defer slides.deinit();
     var children = std.ArrayList(Node).init(ally);
     defer children.deinit();
+
     var i: usize = 0;
     while (i < source.len) : (i += 1) {
         if (parseCodeBlock(source, &i)) |codeblock| {
             try children.append(codeblock);
+        } else if (parseHeader(source, &i)) |header| {
+            try children.append(header);
         } else if (try parseUnorderedList(source, &i, ally)) |list| {
             try children.append(list);
+        } else if (parseDivider(source, &i)) {
+            try slides.append(try children.toOwnedSlice());
         } else {
-            try children.append(readText(source, &i));
+            try children.append(parseText(source, &i));
         }
     }
 
+    try slides.append(try children.toOwnedSlice());
+
     return .{
-        .nodes = try children.toOwnedSlice(),
+        .slides = try slides.toOwnedSlice(),
     };
 }
 
-fn readText(source: []const u8, index: *usize) Node {
+fn parseText(source: []const u8, index: *usize) Node {
     const begin = index.*;
     while (index.* < source.len) : (index.* += 1) {
         switch (source[index.*]) {
@@ -95,7 +108,7 @@ fn parseUnorderedList(source: []const u8, index: *usize, ally: std.mem.Allocator
         }
         index.* += 1;
 
-        const node = readText(source, index);
+        const node = parseText(source, index);
         try list.append(node);
     }
 
@@ -110,14 +123,15 @@ fn parseUnorderedList(source: []const u8, index: *usize, ally: std.mem.Allocator
         };
 }
 
-fn readHeader(source: []const u8, index: *usize) ?Node {
+fn parseHeader(source: []const u8, index: *usize) ?Node {
     const c = source[index.*];
     return switch (c) {
         '#' => {
             index.* += 1;
+            while (index.* < source.len and source[index.*] == ' ') : (index.* += 1) {}
             return Node{
                 .header = .{
-                    .value = readText(source, index).value,
+                    .value = parseText(source, index).text.value,
                     .level = 1,
                 },
             };
@@ -160,6 +174,19 @@ fn parseCodeBlock(source: []const u8, index: *usize) ?Node {
     return null;
 }
 
+fn parseDivider(source: []const u8, index: *usize) bool {
+    const divider_str = "\n---\n";
+    if (source.len < divider_str.len + index.*) {
+        return false;
+    }
+    if (!std.mem.eql(u8, divider_str, source[index.* .. index.* + divider_str.len])) {
+        return false;
+    }
+
+    index.* += divider_str.len;
+    return true;
+}
+
 const expectEqual = std.testing.expectEqual;
 const expect = std.testing.expect;
 const expectEqualString = std.testing.expectEqualStrings;
@@ -174,7 +201,24 @@ test "parse simple markdown" {
     const root = try parse(src, std.testing.allocator);
     defer root.deinit(std.testing.allocator);
 
-    try expectEqual(3, root.nodes.len);
+    try expectEqual(1, root.slides.len);
+    try expectEqual(3, root.slides[0].len);
+}
+
+test "parse header" {
+    const src =
+        \\# Hej
+        \\på
+        \\dig
+    ;
+
+    const root = try parse(src, std.testing.allocator);
+    defer root.deinit(std.testing.allocator);
+
+    try expectEqual(1, root.slides.len);
+    try expectEqual(3, root.slides[0].len);
+    try expectEqual(std.meta.Tag(Node).header, std.meta.activeTag(root.slides[0][0]));
+    try expectEqualString("Hej", root.slides[0][0].header.value);
 }
 
 test "parse list" {
@@ -187,9 +231,10 @@ test "parse list" {
     const root = try parse(src, std.testing.allocator);
     defer root.deinit(std.testing.allocator);
 
-    try expectEqual(1, root.nodes.len);
+    try expectEqual(1, root.slides.len);
+    try expectEqual(1, root.slides[0].len);
 
-    switch (root.nodes[0]) {
+    switch (root.slides[0][0]) {
         .list => |list| {
             try expectEqual(3, list.nodes.len);
             try expect(!list.ordered);
@@ -207,11 +252,32 @@ test "parse codeblock" {
 
     const root = try parse(src, std.testing.allocator);
     defer root.deinit(std.testing.allocator);
-    try expectEqual(1, root.nodes.len);
-    switch (root.nodes[0]) {
+
+    try expectEqual(1, root.slides.len);
+    try expectEqual(1, root.slides[0].len);
+    switch (root.slides[0][0]) {
         .codeblock => {},
         else => unreachable,
     }
-    try expectEqualString("zig", root.nodes[0].codeblock.language);
-    try expectEqualString("var x = u32;", root.nodes[0].codeblock.code);
+    try expectEqualString("zig", root.slides[0][0].codeblock.language);
+    try expectEqualString("var x = u32;", root.slides[0][0].codeblock.code);
+}
+
+test "parse divider" {
+    const src =
+        \\content before
+        \\
+        \\---
+        \\
+        \\content after
+    ;
+
+    const root = try parse(src, std.testing.allocator);
+    defer root.deinit(std.testing.allocator);
+
+    try expectEqual(2, root.slides.len);
+    try expectEqual(1, root.slides[0].len);
+    try expectEqual(1, root.slides[1].len);
+    try expectEqualString("content before", root.slides[0][0].text.value);
+    try expectEqualString("content after", root.slides[1][0].text.value);
 }
