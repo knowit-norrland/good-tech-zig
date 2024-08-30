@@ -66,7 +66,7 @@ pub fn currentSlide(ctx: *Context, root: md.Root) void {
     const nodes = root.slides[ctx.current_slide_idx];
     ctx.bounds = bounds(ctx, nodes);
     ctx.x = @as(f32, @floatFromInt(c.GetRenderWidth())) / 2 - ctx.bounds.x / 2;
-    ctx.y = 0;
+    ctx.y = @as(f32, @floatFromInt(c.GetRenderHeight())) / 2 - ctx.bounds.y / 2;
     currentSlideImpl(ctx, root);
 }
 
@@ -86,6 +86,7 @@ pub fn currentSlideImpl(ctx: *Context, root: md.Root) void {
                     renderText(ctx, listnode.text);
                 }
             },
+            .image => {},
             .codeblock => |block| {
                 //TODO: återimplmentera det här
                 _ = block;
@@ -165,9 +166,13 @@ fn nodesBounds(nodes: []const md.Node) c.Vector2 {
 
     for (nodes) |node| {
         const node_bounds = switch (node) {
-            .text => |t| strBounds(t.value),
-            .header => |h| strBounds(h.value),
+            .text => |t| strBounds(t.value, regular_font_size),
+            .header => |h| strBounds(h.value, header_font_size),
             .list => |l| nodesBounds(l.nodes),
+            .image => c.Vector2{
+                .x = 0,
+                .y = 0,
+            },
             .codeblock => unreachable,
         };
 
@@ -204,12 +209,12 @@ fn drawStr(ctx: *const Context, str: []const u8, x: f32, y: f32, h: f32, color: 
     );
 }
 
-fn strBounds(str: []const u8) c.Vector2 {
+fn strBounds(str: []const u8, font_height: i32) c.Vector2 {
     const slice = strZ(str);
-    const text_width = c.MeasureText(slice, regular_font_size);
+    const text_width = c.MeasureText(slice, font_height);
     return .{
         .x = @floatFromInt(text_width),
-        .y = regular_font_size,
+        .y = @floatFromInt(font_height),
     };
 }
 
