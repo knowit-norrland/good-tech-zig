@@ -10,7 +10,7 @@ pub const Root = struct {
             defer ally.free(slide);
             for (slide) |node| {
                 switch (node) {
-                    .text, .header, .codeblock => {},
+                    .text, .header, .codeblock, .image => {},
                     .list => |list| {
                         list.deinit(ally);
                     },
@@ -25,6 +25,7 @@ pub const Node = union(enum) {
     header: Header,
     list: List,
     codeblock: Codeblock,
+    image: Image,
 };
 
 pub const Text = struct {
@@ -35,6 +36,7 @@ pub const Header = struct {
     value: []const u8,
     level: u32,
 };
+
 pub const List = struct {
     //TODO: det här kanske räcker med att vara en Text(?)
     nodes: []const Node,
@@ -44,9 +46,14 @@ pub const List = struct {
         ally.free(self.nodes);
     }
 };
+
 pub const Codeblock = struct {
     code: []const u8,
     language: []const u8,
+};
+
+pub const Image = struct {
+    filename: []const u8,
 };
 
 pub fn parse(source: []const u8, ally: std.mem.Allocator) !Root {
@@ -65,6 +72,8 @@ pub fn parse(source: []const u8, ally: std.mem.Allocator) !Root {
             try children.append(list);
         } else if (parseDivider(source, &i)) {
             try slides.append(try children.toOwnedSlice());
+        } else if (parseImage(source, &i)) |img| {
+            try children.append(img);
         } else {
             try children.append(parseText(source, &i));
         }
@@ -164,10 +173,12 @@ fn parseCodeBlock(source: []const u8, index: *usize) ?Node {
         if (std.mem.eql(u8, source[index.* .. index.* + 4], "\n```")) {
             code = source[tempindex..index.*];
             index.* += 3;
-            return .{ .codeblock = .{
-                .code = code,
-                .language = lang,
-            } };
+            return .{
+                .codeblock = .{
+                    .code = code,
+                    .language = lang,
+                },
+            };
         }
     }
     index.* = startindex;
@@ -185,6 +196,36 @@ fn parseDivider(source: []const u8, index: *usize) bool {
 
     index.* += divider_str.len;
     return true;
+}
+
+fn parseImage(source: []const u8, index: *usize) ?Node {
+    const start_idx = index.*;
+    const image_start = "!(";
+
+    if (source.len < image_start.len + index.*) {
+        return null;
+    }
+
+    if (!std.mem.eql(u8, image_start, source[index.* .. index.* + image_start.len])) {
+        return null;
+    }
+
+    index.* += image_start.len;
+
+    while (index.* < source.len and source[index.*] != ')') : (index.* += 1) {}
+
+    if (index.* >= source.len) {
+        index.* = start_idx;
+        return null;
+    }
+
+    const img_src_begin = start_idx + image_start.len;
+    const img_src_end = index.*;
+    return .{
+        .image = .{
+            .filename = source[img_src_begin..img_src_end],
+        },
+    };
 }
 
 const expectEqual = std.testing.expectEqual;
@@ -280,4 +321,17 @@ test "parse divider" {
     try expectEqual(1, root.slides[1].len);
     try expectEqualString("content before", root.slides[0][0].text.value);
     try expectEqualString("content after", root.slides[1][0].text.value);
+}
+
+test "parse image" {
+    const src =
+        \\!(my-image.png)
+    ;
+
+    const root = try parse(src, std.testing.allocator);
+    defer root.deinit(std.testing.allocator);
+
+    try expectEqual(1, root.slides.len);
+    try expectEqual(1, root.slides[0].len);
+    try expectEqualString("my-image.png", root.slides[0][0].image.filename);
 }

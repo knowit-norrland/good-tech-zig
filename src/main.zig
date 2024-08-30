@@ -29,7 +29,7 @@ pub fn main() !void {
     const root = try md.parse(src, arena_ally);
 
     c.SetTraceLogLevel(c.LOG_WARNING);
-    c.InitWindow(800, 600, "Window");
+    c.InitWindow(1600, 900, "Presentation");
     defer c.CloseWindow();
     c.SetTargetFPS(60);
 
