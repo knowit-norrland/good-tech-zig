@@ -33,7 +33,8 @@ pub fn main() !void {
     defer c.CloseWindow();
     c.SetTargetFPS(60);
 
-    var ctx = render.Context.init();
+    var ctx = try render.Context.init(arena_ally, root, file);
+    defer ctx.deinit();
 
     while (!c.WindowShouldClose()) {
         handleInputs(&ctx, root);
