@@ -113,14 +113,14 @@ pub fn currentSlideImpl(ctx: *Context, root: md.Root) void {
     for (nodes) |node| {
         switch (node) {
             .header => |header| renderHeader(ctx, header),
-            .text => |text| renderText(ctx, text),
+            .text => |text| renderText(ctx, text.value),
             .list => |list| {
                 for (list.nodes) |listnode| {
-                    renderText(ctx, listnode.text);
+                    renderText(ctx, listnode.text.value);
                 }
             },
             .image => |img| renderImage(ctx, img),
-            .codeblock => unreachable,
+            .codeblock => |codeblock| renderCodeblock(ctx, codeblock),
         }
     }
 }
@@ -171,9 +171,9 @@ fn handleAnimationStep(ctx: *Context) void {
 // renderingen av varje sorts enskild nod ansvarar för att flytta renderingscontexten
 // genom att modifera ctx.y
 
-fn renderText(ctx: *Context, text: md.Text) void {
+fn renderText(ctx: *Context, text: []const u8) void {
     defer ctx.y += regular_font_size; // likt såhär
-    drawStr(ctx, text.value, ctx.x, ctx.y, regular_font_size, color_fg);
+    drawStr(ctx, text, ctx.x, ctx.y, regular_font_size, color_fg);
 }
 
 fn renderHeader(ctx: *Context, h: md.Header) void {
@@ -186,6 +186,13 @@ fn renderImage(ctx: *Context, i: md.Image) void {
     std.debug.assert(ptr != null);
     defer ctx.y += @floatFromInt(ptr.?.height);
     drawImg(ctx, ptr.?.*, ctx.x, ctx.y, c.WHITE);
+}
+
+fn renderCodeblock(ctx: *Context, codeblock : md.Codeblock) void {
+    defer ctx.y += regular_font_size;
+    drawStr(ctx, codeblock.code, ctx.x, ctx.y, 32, color_fg);
+    //change Font
+    //draw box around text??
 }
 
 fn bounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
@@ -206,7 +213,7 @@ fn nodesBounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
             .header => |h| strBounds(h.value, &ctx.regular_font, header_font_size),
             .list => |l| nodesBounds(ctx, l.nodes),
             .image => |i| imgBounds(ctx, i),
-            .codeblock => unreachable,
+            .codeblock => codeBounds(),
         };
 
         if (w < node_bounds.x) {
@@ -269,6 +276,13 @@ fn drawImg(ctx: *const Context, texture: c.Texture2D, x: f32, y: f32, color: c.C
 fn strBounds(str: []const u8, font: *const c.Font, font_height: i32) c.Vector2 {
     const slice = strZ(str);
     return c.MeasureTextEx(font.*, slice, @floatFromInt(font_height), 0);
+}
+
+fn codeBounds() c.Vector2 {
+    return .{
+        .x=100.0,
+        .y=100.0,
+    };
 }
 
 fn workingDirFromPath(path: []const u8) []const u8 {
