@@ -5,6 +5,8 @@ const c = @cImport({
     @cInclude("raylib.h");
 });
 
+const TextureTable = std.StringHashMap(c.Texture2D);
+
 const regular_font_data = @embedFile("./inter.ttf");
 
 const regular_font_size = 64;
@@ -22,18 +24,19 @@ pub const Context = struct {
     codepoints: [n_codepoints]i32,
     x: f32 = 0,
     y: f32 = 0,
-    bounds: c.Vector2 = .{},
     scale: f32 = 1.0,
     current_slide_idx: usize = 0,
     alpha: f32 = 1.0,
     animating: bool = false,
     animation_target_slide: usize = 0,
     animation_begin_timestamp: i64 = 0,
+    texture_table: TextureTable,
 
-    pub fn init() Context {
+    pub fn init(ally: std.mem.Allocator, root: md.Root, path: []const u8) !Context {
         var ctx = Context{
             .regular_font = undefined,
             .codepoints = undefined,
+            .texture_table = TextureTable.init(ally),
         };
         // den här instruktionen reserverar ett antal greninstruktioner
         // för bruk vid comptime (för sammanhangets skull)
@@ -54,19 +57,49 @@ pub const Context = struct {
             (&ctx.codepoints).ptr,
             n_codepoints,
         );
+
         // gör textens kanter lite finare vid skalning (men påverkar såklart prestanda)
         // se: https://en.wikipedia.org/wiki/Bilinear_interpolation
         c.SetTextureFilter(ctx.regular_font.texture, c.TEXTURE_FILTER_BILINEAR);
+
+        var buf: [512]u8 = undefined;
+        const dir = workingDirFromPath(path);
+
+        for (root.slides) |slide| {
+            for (slide) |node| {
+                switch (node) {
+                    .image => |img| {
+                        if (ctx.texture_table.getPtr(img.filename) != null) {
+                            continue;
+                        }
+                        const c_slice = try std.fmt.bufPrintZ(&buf, "{s}{s}", .{ dir, img.filename });
+                        const loaded_texture = c.LoadTexture(c_slice);
+                        c.SetTextureFilter(loaded_texture, c.TEXTURE_FILTER_BILINEAR);
+                        try ctx.texture_table.put(img.filename, loaded_texture);
+                    },
+                    else => {},
+                }
+            }
+        }
+
         return ctx;
+    }
+
+    pub fn deinit(ctx: *const Context) void {
+        var it = ctx.texture_table.valueIterator();
+        while (it.next()) |texture| {
+            c.UnloadTexture(texture.*);
+        }
     }
 };
 
 // renderar en enskild slide
 pub fn currentSlide(ctx: *Context, root: md.Root) void {
     const nodes = root.slides[ctx.current_slide_idx];
-    ctx.bounds = bounds(ctx, nodes);
-    ctx.x = @as(f32, @floatFromInt(c.GetRenderWidth())) / 2 - ctx.bounds.x / 2;
-    ctx.y = @as(f32, @floatFromInt(c.GetRenderHeight())) / 2 - ctx.bounds.y / 2;
+    const b = bounds(ctx, nodes);
+    ctx.x = @as(f32, @floatFromInt(c.GetRenderWidth())) / 2 - b.x / 2;
+    ctx.y = @as(f32, @floatFromInt(c.GetRenderHeight())) / 2 - b.y / 2;
+    ctx.y /= ctx.scale;
     currentSlideImpl(ctx, root);
 }
 
@@ -86,12 +119,8 @@ pub fn currentSlideImpl(ctx: *Context, root: md.Root) void {
                     renderText(ctx, listnode.text);
                 }
             },
-            .image => {},
-            .codeblock => |block| {
-                //TODO: återimplmentera det här
-                _ = block;
-                //renderText(ctx, block.code);
-            },
+            .image => |img| renderImage(ctx, img),
+            .codeblock => unreachable,
         }
     }
 }
@@ -152,27 +181,31 @@ fn renderHeader(ctx: *Context, h: md.Header) void {
     drawStr(ctx, h.value, ctx.x, ctx.y, header_font_size, color_fg);
 }
 
+fn renderImage(ctx: *Context, i: md.Image) void {
+    const ptr = ctx.texture_table.getPtr(i.filename);
+    std.debug.assert(ptr != null);
+    defer ctx.y += @floatFromInt(ptr.?.height);
+    drawImg(ctx, ptr.?.*, ctx.x, ctx.y, c.WHITE);
+}
+
 fn bounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
-    const b = nodesBounds(nodes);
+    const b = nodesBounds(ctx, nodes);
     return .{
         .x = b.x * ctx.scale,
         .y = b.y * ctx.scale,
     };
 }
 
-fn nodesBounds(nodes: []const md.Node) c.Vector2 {
+fn nodesBounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
     var w: f32 = 0;
     var height: f32 = 0;
 
     for (nodes) |node| {
         const node_bounds = switch (node) {
-            .text => |t| strBounds(t.value, regular_font_size),
-            .header => |h| strBounds(h.value, header_font_size),
-            .list => |l| nodesBounds(l.nodes),
-            .image => c.Vector2{
-                .x = 0,
-                .y = 0,
-            },
+            .text => |t| strBounds(t.value, &ctx.regular_font, regular_font_size),
+            .header => |h| strBounds(h.value, &ctx.regular_font, header_font_size),
+            .list => |l| nodesBounds(ctx, l.nodes),
+            .image => |i| imgBounds(ctx, i),
             .codeblock => unreachable,
         };
 
@@ -185,6 +218,15 @@ fn nodesBounds(nodes: []const md.Node) c.Vector2 {
     return .{
         .x = w,
         .y = height,
+    };
+}
+
+fn imgBounds(ctx: *const Context, img: md.Image) c.Vector2 {
+    const ptr = ctx.texture_table.getPtr(img.filename);
+    std.debug.assert(ptr != null);
+    return .{
+        .x = @floatFromInt(ptr.?.width),
+        .y = @floatFromInt(ptr.?.height),
     };
 }
 
@@ -209,13 +251,29 @@ fn drawStr(ctx: *const Context, str: []const u8, x: f32, y: f32, h: f32, color: 
     );
 }
 
-fn strBounds(str: []const u8, font_height: i32) c.Vector2 {
+fn drawImg(ctx: *const Context, texture: c.Texture2D, x: f32, y: f32, color: c.Color) void {
+    var alpha_applied_color = color;
+    alpha_applied_color.a = @intFromFloat(ctx.alpha * @as(f32, @floatFromInt(color.a)));
+    c.DrawTextureEx(
+        texture,
+        c.Vector2{
+            .x = x,
+            .y = y * ctx.scale,
+        },
+        0,
+        ctx.scale,
+        alpha_applied_color,
+    );
+}
+
+fn strBounds(str: []const u8, font: *const c.Font, font_height: i32) c.Vector2 {
     const slice = strZ(str);
-    const text_width = c.MeasureText(slice, font_height);
-    return .{
-        .x = @floatFromInt(text_width),
-        .y = @floatFromInt(font_height),
-    };
+    return c.MeasureTextEx(font.*, slice, @floatFromInt(font_height), 0);
+}
+
+fn workingDirFromPath(path: []const u8) []const u8 {
+    const idx = std.mem.lastIndexOfScalar(u8, path, '/') orelse return "";
+    return path[0 .. idx + 1];
 }
 
 // bekvämlighet för att skapa nullterminerade strängar
