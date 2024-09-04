@@ -1,6 +1,8 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
+//TODO: kommentarer, siffror, typer
+
 pub const Token = struct {
     pub const Kind = enum {
         keyword,
