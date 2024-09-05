@@ -8,12 +8,15 @@ const c = @cImport({
 const TextureTable = std.StringHashMap(c.Texture2D);
 
 const regular_font_data = @embedFile("./inter.ttf");
+const mono_space_font =  @embedFile("./JetBrainsMono.ttf");
 
+const code_font_size = 48;
 const regular_font_size = 64;
 const header_font_size = 128;
 
 const color_bg = hex(0x3A3335);
 const color_fg = hex(0xFFFFFF);
+const color_cb = hex(0x515151);
 
 pub const Context = struct {
     pub const n_codepoints = 1024;
@@ -21,6 +24,7 @@ pub const Context = struct {
     pub const min_scale = 0.5;
 
     regular_font: c.Font,
+    code_font: c.Font,
     codepoints: [n_codepoints]i32,
     x: f32 = 0,
     y: f32 = 0,
@@ -35,6 +39,7 @@ pub const Context = struct {
     pub fn init(ally: std.mem.Allocator, root: md.Root, path: []const u8) !Context {
         var ctx = Context{
             .regular_font = undefined,
+            .code_font = undefined,
             .codepoints = undefined,
             .texture_table = TextureTable.init(ally),
         };
@@ -57,7 +62,14 @@ pub const Context = struct {
             (&ctx.codepoints).ptr,
             n_codepoints,
         );
-
+        ctx.code_font = c.LoadFontFromMemory(
+            ".ttf",
+            mono_space_font.ptr,
+            mono_space_font.len,
+            code_font_size * max_scale,
+            (&ctx.codepoints).ptr,
+            n_codepoints,
+        );
         // gör textens kanter lite finare vid skalning (men påverkar såklart prestanda)
         // se: https://en.wikipedia.org/wiki/Bilinear_interpolation
         c.SetTextureFilter(ctx.regular_font.texture, c.TEXTURE_FILTER_BILINEAR);
@@ -173,12 +185,12 @@ fn handleAnimationStep(ctx: *Context) void {
 
 fn renderText(ctx: *Context, text: []const u8) void {
     defer ctx.y += regular_font_size; // likt såhär
-    drawStr(ctx, text, ctx.x, ctx.y, regular_font_size, color_fg);
+    drawStr(ctx, text, ctx.x, ctx.y, regular_font_size, color_fg, ctx.regular_font);
 }
 
 fn renderHeader(ctx: *Context, h: md.Header) void {
     defer ctx.y += header_font_size;
-    drawStr(ctx, h.value, ctx.x, ctx.y, header_font_size, color_fg);
+    drawStr(ctx, h.value, ctx.x, ctx.y, header_font_size, color_fg, ctx.regular_font);
 }
 
 fn renderImage(ctx: *Context, i: md.Image) void {
@@ -189,10 +201,9 @@ fn renderImage(ctx: *Context, i: md.Image) void {
 }
 
 fn renderCodeblock(ctx: *Context, codeblock : md.Codeblock) void {
-    defer ctx.y += regular_font_size;
-    drawStr(ctx, codeblock.code, ctx.x, ctx.y, 32, color_fg);
-    //change Font
-    //draw box around text??
+    drawCodeBackground(ctx, strBounds(codeblock.code, &ctx.code_font, code_font_size));
+    drawStr(ctx, codeblock.code, ctx.x, ctx.y, code_font_size, color_fg, ctx.code_font);
+
 }
 
 fn bounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
@@ -213,7 +224,7 @@ fn nodesBounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
             .header => |h| strBounds(h.value, &ctx.regular_font, header_font_size),
             .list => |l| nodesBounds(ctx, l.nodes),
             .image => |i| imgBounds(ctx, i),
-            .codeblock => codeBounds(),
+            .codeblock => |code| strBounds(code.code, &ctx.code_font, code_font_size),
         };
 
         if (w < node_bounds.x) {
@@ -241,12 +252,12 @@ fn imgBounds(ctx: *const Context, img: md.Image) c.Vector2 {
 // tanken är att funktionerna för att rendera konstruktionerna nyttjar
 // den här funktionen, så löser sig problem med skalning/dylikt på en
 // gemensam punkt
-fn drawStr(ctx: *const Context, str: []const u8, x: f32, y: f32, h: f32, color: c.Color) void {
+fn drawStr(ctx: *const Context, str: []const u8, x: f32, y: f32, h: f32, color: c.Color, font: c.Font) void {
     const slice = strZ(str);
     var alpha_applied_color = color;
     alpha_applied_color.a = @intFromFloat(ctx.alpha * @as(f32, @floatFromInt(color.a)));
     c.DrawTextEx(
-        ctx.regular_font,
+        font,
         slice,
         c.Vector2{
             .x = x,
@@ -256,6 +267,19 @@ fn drawStr(ctx: *const Context, str: []const u8, x: f32, y: f32, h: f32, color: 
         0,
         alpha_applied_color,
     );
+}
+
+fn drawCodeBackground(ctx: *const Context, textsize: c.Vector2) void {
+   const padding = 2;
+    //c.DrawRectangle( @intFromFloat(ctx.x-padding),  @intFromFloat(ctx.y * ctx.scale-padding), @intFromFloat(textsize.x*ctx.scale+2*padding), @intFromFloat(textsize.y*ctx.scale+2*padding), color_cb);
+    const rect  = c.Rectangle{
+        .x = (ctx.x-padding),
+        .y = (ctx.y * ctx.scale-padding),
+        .width = (textsize.x*ctx.scale+2*padding),
+        .height = (textsize.y*ctx.scale+2*padding),
+
+    };
+    c.DrawRectangleRounded(rect, 0.05, 1, color_cb);
 }
 
 fn drawImg(ctx: *const Context, texture: c.Texture2D, x: f32, y: f32, color: c.Color) void {
@@ -276,13 +300,6 @@ fn drawImg(ctx: *const Context, texture: c.Texture2D, x: f32, y: f32, color: c.C
 fn strBounds(str: []const u8, font: *const c.Font, font_height: i32) c.Vector2 {
     const slice = strZ(str);
     return c.MeasureTextEx(font.*, slice, @floatFromInt(font_height), 0);
-}
-
-fn codeBounds() c.Vector2 {
-    return .{
-        .x=100.0,
-        .y=100.0,
-    };
 }
 
 fn workingDirFromPath(path: []const u8) []const u8 {
