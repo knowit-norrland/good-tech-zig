@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const md = @import("md.zig");
 const render = @import("render.zig");
 const c = @cImport({
@@ -28,8 +29,11 @@ pub fn main() !void {
     const src = try std.fs.cwd().readFileAlloc(arena_ally, file, 1_000_000_000);
     const root = try md.parse(src, arena_ally);
 
+    const width = c.GetMonitorWidth(c.GetCurrentMonitor());
+    const height = c.GetMonitorHeight(c.GetCurrentMonitor());
+
     c.SetTraceLogLevel(c.LOG_WARNING);
-    c.InitWindow(1600, 900, "Presentation");
+    c.InitWindow(width, height, "Presentation");
     defer c.CloseWindow();
     c.SetTargetFPS(60);
 
@@ -64,4 +68,5 @@ comptime {
 
     refAllDecls(@import("md.zig"));
     refAllDecls(@import("render.zig"));
+    refAllDecls(@import("highlight.zig"));
 }
