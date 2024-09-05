@@ -8,7 +8,7 @@ const c = @cImport({
 const TextureTable = std.StringHashMap(c.Texture2D);
 
 const regular_font_data = @embedFile("./inter.ttf");
-const mono_space_font =  @embedFile("./JetBrainsMono.ttf");
+const mono_space_font = @embedFile("./JetBrainsMono.ttf");
 
 const code_font_size = 48;
 const regular_font_size = 64;
@@ -73,6 +73,7 @@ pub const Context = struct {
         // gör textens kanter lite finare vid skalning (men påverkar såklart prestanda)
         // se: https://en.wikipedia.org/wiki/Bilinear_interpolation
         c.SetTextureFilter(ctx.regular_font.texture, c.TEXTURE_FILTER_BILINEAR);
+        c.SetTextureFilter(ctx.code_font.texture, c.TEXTURE_FILTER_BILINEAR);
 
         var buf: [512]u8 = undefined;
         const dir = workingDirFromPath(path);
@@ -125,10 +126,10 @@ pub fn currentSlideImpl(ctx: *Context, root: md.Root) void {
     for (nodes) |node| {
         switch (node) {
             .header => |header| renderHeader(ctx, header),
-            .text => |text| renderText(ctx, text.value),
+            .text => |text| renderText(ctx, text),
             .list => |list| {
                 for (list.nodes) |listnode| {
-                    renderText(ctx, listnode.text.value);
+                    renderText(ctx, listnode.text);
                 }
             },
             .image => |img| renderImage(ctx, img),
@@ -183,9 +184,9 @@ fn handleAnimationStep(ctx: *Context) void {
 // renderingen av varje sorts enskild nod ansvarar för att flytta renderingscontexten
 // genom att modifera ctx.y
 
-fn renderText(ctx: *Context, text: []const u8) void {
+fn renderText(ctx: *Context, text: md.Text) void {
     defer ctx.y += regular_font_size; // likt såhär
-    drawStr(ctx, text, ctx.x, ctx.y, regular_font_size, color_fg, ctx.regular_font);
+    drawStr(ctx, text.value, ctx.x, ctx.y, regular_font_size, color_fg, ctx.regular_font);
 }
 
 fn renderHeader(ctx: *Context, h: md.Header) void {
@@ -200,10 +201,9 @@ fn renderImage(ctx: *Context, i: md.Image) void {
     drawImg(ctx, ptr.?.*, ctx.x, ctx.y, c.WHITE);
 }
 
-fn renderCodeblock(ctx: *Context, codeblock : md.Codeblock) void {
+fn renderCodeblock(ctx: *Context, codeblock: md.Codeblock) void {
     drawCodeBackground(ctx, strBounds(codeblock.code, &ctx.code_font, code_font_size));
     drawStr(ctx, codeblock.code, ctx.x, ctx.y, code_font_size, color_fg, ctx.code_font);
-
 }
 
 fn bounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
@@ -270,14 +270,12 @@ fn drawStr(ctx: *const Context, str: []const u8, x: f32, y: f32, h: f32, color: 
 }
 
 fn drawCodeBackground(ctx: *const Context, textsize: c.Vector2) void {
-   const padding = 2;
-    //c.DrawRectangle( @intFromFloat(ctx.x-padding),  @intFromFloat(ctx.y * ctx.scale-padding), @intFromFloat(textsize.x*ctx.scale+2*padding), @intFromFloat(textsize.y*ctx.scale+2*padding), color_cb);
-    const rect  = c.Rectangle{
-        .x = (ctx.x-padding),
-        .y = (ctx.y * ctx.scale-padding),
-        .width = (textsize.x*ctx.scale+2*padding),
-        .height = (textsize.y*ctx.scale+2*padding),
-
+    const padding = 2;
+    const rect = c.Rectangle{
+        .x = (ctx.x - padding),
+        .y = (ctx.y * ctx.scale - padding),
+        .width = (textsize.x * ctx.scale + 2 * padding),
+        .height = (textsize.y * ctx.scale + 2 * padding),
     };
     c.DrawRectangleRounded(rect, 0.05, 1, color_cb);
 }
