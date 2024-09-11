@@ -1,5 +1,6 @@
 const std = @import("std");
 const md = @import("md.zig");
+const hi = @import("highlight.zig");
 
 const c = @cImport({
     @cInclude("raylib.h");
@@ -18,6 +19,13 @@ const color_bg = hex(0x3A3335);
 const color_fg = hex(0xFFFFFF);
 const color_cb = hex(0x515151);
 
+const color_keyword = hex(0x00FF00);
+const color_symbol = color_fg;
+const color_other = color_fg;
+const color_builtin = hex(0xFF00FF);
+const color_string = hex(0x55AAFF);
+
+
 pub const Context = struct {
     pub const n_codepoints = 1024;
     pub const max_scale = 2.5;
@@ -35,6 +43,7 @@ pub const Context = struct {
     animation_target_slide: usize = 0,
     animation_begin_timestamp: i64 = 0,
     texture_table: TextureTable,
+    frame_arena: std.heap.ArenaAllocator,
 
     pub fn init(ally: std.mem.Allocator, root: md.Root, path: []const u8) !Context {
         var ctx = Context{
@@ -42,6 +51,7 @@ pub const Context = struct {
             .code_font = undefined,
             .codepoints = undefined,
             .texture_table = TextureTable.init(ally),
+            .frame_arena = std.heap.ArenaAllocator.init(ally),
         };
         // den här instruktionen reserverar ett antal greninstruktioner
         // för bruk vid comptime (för sammanhangets skull)
@@ -107,16 +117,17 @@ pub const Context = struct {
 };
 
 // renderar en enskild slide
-pub fn currentSlide(ctx: *Context, root: md.Root) void {
+pub fn currentSlide(ctx: *Context, root: md.Root) !void {
+    _ = ctx.frame_arena.reset(.retain_capacity);
     const nodes = root.slides[ctx.current_slide_idx];
     const b = bounds(ctx, nodes);
     ctx.x = @as(f32, @floatFromInt(c.GetRenderWidth())) / 2 - b.x / 2;
     ctx.y = @as(f32, @floatFromInt(c.GetRenderHeight())) / 2 - b.y / 2;
     ctx.y /= ctx.scale;
-    currentSlideImpl(ctx, root);
+    try currentSlideImpl(ctx, root);
 }
 
-pub fn currentSlideImpl(ctx: *Context, root: md.Root) void {
+pub fn currentSlideImpl(ctx: *Context, root: md.Root) !void {
     const nodes = root.slides[ctx.current_slide_idx];
 
     handleAnimationStep(ctx);
@@ -127,13 +138,9 @@ pub fn currentSlideImpl(ctx: *Context, root: md.Root) void {
         switch (node) {
             .header => |header| renderHeader(ctx, header),
             .text => |text| renderText(ctx, text),
-            .list => |list| {
-                for (list.nodes) |listnode| {
-                    renderText(ctx, listnode.text);
-                }
-            },
+            .list => |list| renderList(ctx, list),
             .image => |img| renderImage(ctx, img),
-            .codeblock => |codeblock| renderCodeblock(ctx, codeblock),
+            .codeblock => |codeblock|try  renderCodeblock(ctx, codeblock),
         }
     }
 }
@@ -194,6 +201,30 @@ fn renderHeader(ctx: *Context, h: md.Header) void {
     drawStr(ctx, h.value, ctx.x, ctx.y, header_font_size, color_fg, ctx.regular_font);
 }
 
+fn renderList(ctx: *Context, l: md.List) void {
+    const margin_left = ctx.x;
+    defer {
+        ctx.y += regular_font_size;
+        ctx.x = margin_left;
+    }
+
+    const offset = regular_font_size / 4;
+    const font_char_dimension = strBounds(" ", &ctx.regular_font, regular_font_size);
+
+    //TODO: skalningen mår sisådär
+    for (l.nodes) |listnode| {
+        ctx.x += offset;
+        ctx.y += regular_font_size / 4;
+        drawCircle(ctx, regular_font_size / 4, color_fg);
+        ctx.x += font_char_dimension.x * 3;
+        ctx.x -= offset;
+        ctx.y -= regular_font_size / 4;
+        renderText(ctx, listnode.text);
+        ctx.y += regular_font_size / 4;
+        ctx.x = margin_left;
+    }
+}
+
 fn renderImage(ctx: *Context, i: md.Image) void {
     const ptr = ctx.texture_table.getPtr(i.filename);
     std.debug.assert(ptr != null);
@@ -201,9 +232,46 @@ fn renderImage(ctx: *Context, i: md.Image) void {
     drawImg(ctx, ptr.?.*, ctx.x, ctx.y, c.WHITE);
 }
 
-fn renderCodeblock(ctx: *Context, codeblock: md.Codeblock) void {
+fn renderCodeblock(ctx: *Context, codeblock: md.Codeblock) !void {
     drawCodeBackground(ctx, strBounds(codeblock.code, &ctx.code_font, code_font_size));
-    drawStr(ctx, codeblock.code, ctx.x, ctx.y, code_font_size, color_fg, ctx.code_font);
+
+    const left_margin = ctx.x;
+
+    var it = std.mem.splitScalar(u8, codeblock.code, '\n');
+    while(it.next()) |line| {
+        const tokens = try hi.line(ctx.frame_arena.allocator(), line);
+        for(tokens) |token| {
+            switch (token.kind) {
+                .keyword => {
+                    drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_keyword, ctx.code_font);
+                },
+                .builtin => {
+                    drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_builtin, ctx.code_font);
+                },
+                .other => {
+                    drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_other, ctx.code_font);
+                },
+
+                .space => {
+                },
+                .string => {
+                    drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_string, ctx.code_font);
+                },
+                .symbol => {
+                    drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_symbol, ctx.code_font);
+                },
+                .comment => unreachable, //TODO: this
+                .number => unreachable,
+                .primitive => unreachable,
+            }
+            const b = strBounds(token.value, &ctx.code_font, code_font_size);
+            ctx.x += b.x * ctx.scale;
+        }
+        ctx.y += code_font_size;
+        ctx.x = left_margin;
+    }
+
+    //drawStr(ctx, codeblock.code, ctx.x, ctx.y, code_font_size, color_fg, ctx.code_font);
 }
 
 fn bounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
@@ -269,15 +337,26 @@ fn drawStr(ctx: *const Context, str: []const u8, x: f32, y: f32, h: f32, color: 
     );
 }
 
+fn drawCircle(ctx: *const Context, radius: f32, color: c.Color) void {
+    var alpha_applied_color = color;
+    alpha_applied_color.a = @intFromFloat(ctx.alpha * @as(f32, @floatFromInt(color.a)));
+    c.DrawCircleV(.{
+        .x = (ctx.x + radius), .y = (ctx.y + radius) * ctx.scale,
+    }, radius * ctx.scale, alpha_applied_color);
+}
+
 fn drawCodeBackground(ctx: *const Context, textsize: c.Vector2) void {
-    const padding = 2;
+    var alpha_applied_color = color_cb;
+    alpha_applied_color.a = @intFromFloat(ctx.alpha * @as(f32, @floatFromInt(color_cb.a)));
+    const padding_x = 32 * ctx.scale;
+    const padding_y = 16 * ctx.scale;
     const rect = c.Rectangle{
-        .x = (ctx.x - padding),
-        .y = (ctx.y * ctx.scale - padding),
-        .width = (textsize.x * ctx.scale + 2 * padding),
-        .height = (textsize.y * ctx.scale + 2 * padding),
+        .x = (ctx.x - padding_x),
+        .y = (ctx.y * ctx.scale - padding_y),
+        .width = (textsize.x * ctx.scale + 2 * padding_x)  ,
+        .height = (textsize.y * ctx.scale + 2 * padding_y) ,
     };
-    c.DrawRectangleRounded(rect, 0.05, 1, color_cb);
+    c.DrawRectangleRounded(rect, 0.05, 1, alpha_applied_color);
 }
 
 fn drawImg(ctx: *const Context, texture: c.Texture2D, x: f32, y: f32, color: c.Color) void {

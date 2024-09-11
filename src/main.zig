@@ -43,7 +43,7 @@ pub fn main() !void {
     while (!c.WindowShouldClose()) {
         handleInputs(&ctx, root);
         c.BeginDrawing();
-        render.currentSlide(&ctx, root);
+        try render.currentSlide(&ctx, root);
         c.EndDrawing();
     }
 }

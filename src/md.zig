@@ -70,6 +70,7 @@ pub fn parse(source: []const u8, ally: std.mem.Allocator) !Root {
             try children.append(header);
         } else if (try parseUnorderedList(source, &i, ally)) |list| {
             try children.append(list);
+            i -= 1;
         } else if (parseDivider(source, &i)) {
             try slides.append(try children.toOwnedSlice());
         } else if (parseImage(source, &i)) |img| {
