@@ -158,6 +158,12 @@ pub fn line(ally: std.mem.Allocator, src: []const u8) !Tokens {
                     .value = ctx.substr(begin),
                     .kind = .string,
                 });
+            } else if (ctx.get() == '/' and !ctx.eol() and ctx.src[ctx.idx + 1] == '/') { // comment
+                try tokens.append(.{
+                    .value = ctx.src[begin..],
+                    .kind = .comment,
+                });
+                ctx.idx = ctx.src.len;
             } else {
                 ctx.next();
                 try tokens.append(.{
@@ -171,10 +177,22 @@ pub fn line(ally: std.mem.Allocator, src: []const u8) !Tokens {
                 .kind = .builtin,
             });
         } else {
-            try tokens.append(.{
-                .value = token_slice,
-                .kind = .other,
-            });
+            if (isNumber(token_slice)) {
+                try tokens.append(.{
+                    .value = token_slice,
+                    .kind = .number,
+                });
+            } else if (isPrimitive(token_slice)) {
+                try tokens.append(.{
+                    .value = token_slice,
+                    .kind = .primitive,
+                });
+            } else {
+                try tokens.append(.{
+                    .value = token_slice,
+                    .kind = .other,
+                });
+            }
         }
     }
 
@@ -214,6 +232,40 @@ fn isWhitespace(char: u8) bool {
         ' ', '\n', '\t' => true,
         else => false,
     };
+}
+
+fn isNumber(slice: []const u8) bool {
+    var i: usize = 0;
+    if (slice[i] == '-') {
+        i += 1;
+    }
+
+    while (i < slice.len) : (i += 1) {
+        switch (slice[i]) {
+            '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.' => {},
+            else => {
+                return false;
+            },
+        }
+    }
+    return true;
+}
+
+fn isPrimitive(slice: []const u8) bool {
+    if (slice[0] == 'u' or slice[0] == 'i' or slice[0] == 'f') {
+        if (isNumber(slice[1..])) {
+            return true;
+        }
+    }
+
+    const static = struct {
+        var primitive_table = std.StaticStringMap(void).initComptime(.{
+            .{"bool"},
+            .{"void"},
+        });
+    };
+
+    return static.primitive_table.get(slice) != null;
 }
 
 const expect = std.testing.expect;
@@ -267,5 +319,44 @@ test "highlight hello-world" {
         const tokens = try line(ally, src[line_idx..line_end]);
         defer ally.free(tokens);
         try expectEqual(0, tokens.len);
+    }
+}
+
+test "highlight numbers" {
+    const src =
+        \\print("askasd {}, {}", .{52, 42});
+    ;
+    const ally = std.testing.allocator;
+    var it = std.mem.tokenize(u8, src, "\n");
+    while (it.next()) |slice| {
+        const tokens = try line(ally, slice);
+        defer ally.free(tokens);
+        try expect(0 < tokens.len);
+        try expectEqual(Token.Kind.other, tokens[0].kind);
+        try expectEqual(Token.Kind.symbol, tokens[1].kind);
+        try expectEqual(Token.Kind.string, tokens[2].kind);
+        try expectEqual(Token.Kind.symbol, tokens[3].kind);
+        try expectEqual(Token.Kind.space, tokens[4].kind);
+        try expectEqual(Token.Kind.symbol, tokens[5].kind);
+        try expectEqual(Token.Kind.symbol, tokens[6].kind);
+        try expectEqual(Token.Kind.number, tokens[7].kind);
+    }
+}
+
+test "highlight comment" {
+    const src =
+        \\not comment // comment
+    ;
+    const ally = std.testing.allocator;
+    var it = std.mem.tokenize(u8, src, "\n");
+    while (it.next()) |slice| {
+        const tokens = try line(ally, slice);
+        defer ally.free(tokens);
+        try expect(0 < tokens.len);
+        try expectEqual(Token.Kind.other, tokens[0].kind);
+        try expectEqual(Token.Kind.space, tokens[1].kind);
+        try expectEqual(Token.Kind.other, tokens[2].kind);
+        try expectEqual(Token.Kind.space, tokens[3].kind);
+        try expectEqual(Token.Kind.comment, tokens[4].kind);
     }
 }

@@ -17,14 +17,17 @@ const header_font_size = 128;
 
 const color_bg = hex(0x3A3335);
 const color_fg = hex(0xFFFFFF);
-const color_cb = hex(0x515151);
+const color_cb = hex(0x2A2325);
+//const color_cb = hex(0x414141);
 
-const color_keyword = hex(0x00FF00);
+const color_keyword = hex(0x569DD9);
 const color_symbol = color_fg;
 const color_other = color_fg;
-const color_builtin = hex(0xFF00FF);
-const color_string = hex(0x55AAFF);
-
+const color_builtin = hex(0xAE7191);
+const color_string = hex(0xDD9875);
+const color_number = hex(0xBCD0A7);
+const color_comment = hex(0x669654);
+const color_primitive = hex(0x9ADDFF);
 
 pub const Context = struct {
     pub const n_codepoints = 1024;
@@ -140,7 +143,7 @@ pub fn currentSlideImpl(ctx: *Context, root: md.Root) !void {
             .text => |text| renderText(ctx, text),
             .list => |list| renderList(ctx, list),
             .image => |img| renderImage(ctx, img),
-            .codeblock => |codeblock|try  renderCodeblock(ctx, codeblock),
+            .codeblock => |codeblock| try renderCodeblock(ctx, codeblock),
         }
     }
 }
@@ -238,9 +241,9 @@ fn renderCodeblock(ctx: *Context, codeblock: md.Codeblock) !void {
     const left_margin = ctx.x;
 
     var it = std.mem.splitScalar(u8, codeblock.code, '\n');
-    while(it.next()) |line| {
+    while (it.next()) |line| {
         const tokens = try hi.line(ctx.frame_arena.allocator(), line);
-        for(tokens) |token| {
+        for (tokens) |token| {
             switch (token.kind) {
                 .keyword => {
                     drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_keyword, ctx.code_font);
@@ -252,17 +255,22 @@ fn renderCodeblock(ctx: *Context, codeblock: md.Codeblock) !void {
                     drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_other, ctx.code_font);
                 },
 
-                .space => {
-                },
+                .space => {},
                 .string => {
                     drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_string, ctx.code_font);
                 },
                 .symbol => {
                     drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_symbol, ctx.code_font);
                 },
-                .comment => unreachable, //TODO: this
-                .number => unreachable,
-                .primitive => unreachable,
+                .comment => {
+                    drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_comment, ctx.code_font);
+                },
+                .number => {
+                    drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_number, ctx.code_font);
+                },
+                .primitive => {
+                    drawStr(ctx, token.value, ctx.x, ctx.y, code_font_size, color_primitive, ctx.code_font);
+                },
             }
             const b = strBounds(token.value, &ctx.code_font, code_font_size);
             ctx.x += b.x * ctx.scale;
@@ -341,7 +349,8 @@ fn drawCircle(ctx: *const Context, radius: f32, color: c.Color) void {
     var alpha_applied_color = color;
     alpha_applied_color.a = @intFromFloat(ctx.alpha * @as(f32, @floatFromInt(color.a)));
     c.DrawCircleV(.{
-        .x = (ctx.x + radius), .y = (ctx.y + radius) * ctx.scale,
+        .x = (ctx.x + radius),
+        .y = (ctx.y + radius) * ctx.scale,
     }, radius * ctx.scale, alpha_applied_color);
 }
 
@@ -353,8 +362,8 @@ fn drawCodeBackground(ctx: *const Context, textsize: c.Vector2) void {
     const rect = c.Rectangle{
         .x = (ctx.x - padding_x),
         .y = (ctx.y * ctx.scale - padding_y),
-        .width = (textsize.x * ctx.scale + 2 * padding_x)  ,
-        .height = (textsize.y * ctx.scale + 2 * padding_y) ,
+        .width = (textsize.x * ctx.scale + 2 * padding_x),
+        .height = (textsize.y * ctx.scale + 2 * padding_y),
     };
     c.DrawRectangleRounded(rect, 0.05, 1, alpha_applied_color);
 }
