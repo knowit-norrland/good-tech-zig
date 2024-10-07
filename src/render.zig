@@ -18,7 +18,6 @@ const header_font_size = 128;
 const color_bg = hex(0x3A3335);
 const color_fg = hex(0xFFFFFF);
 const color_cb = hex(0x2A2325);
-//const color_cb = hex(0x414141);
 
 const color_keyword = hex(0x569DD9);
 const color_symbol = color_fg;
@@ -84,9 +83,8 @@ pub const Context = struct {
             n_codepoints,
         );
         // gör textens kanter lite finare vid skalning (men påverkar såklart prestanda)
-        // se: https://en.wikipedia.org/wiki/Bilinear_interpolation
-        c.SetTextureFilter(ctx.regular_font.texture, c.TEXTURE_FILTER_BILINEAR);
-        c.SetTextureFilter(ctx.code_font.texture, c.TEXTURE_FILTER_BILINEAR);
+        c.SetTextureFilter(ctx.regular_font.texture, c.TEXTURE_FILTER_ANISOTROPIC_4X);
+        c.SetTextureFilter(ctx.code_font.texture, c.TEXTURE_FILTER_ANISOTROPIC_4X);
 
         var buf: [512]u8 = undefined;
         const dir = workingDirFromPath(path);
