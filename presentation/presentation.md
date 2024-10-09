@@ -25,7 +25,7 @@ Adam Temmel & Fredrik Kåhre
 # Vad erbjuder Zig som språk?
 
 * Imperativ stil
-* Ergonomisk felhantering
+* Explicit felhantering
 * Strikt men generöst typsystem
 * Typer som värden
 * Metaprogrammering via comptime
@@ -39,12 +39,10 @@ Adam Temmel & Fredrik Kåhre
 * Explicit minneshantering
 * Explicita fel
 * Inga funktionsöverlagringar
-* Inga interfaces
+* Inga interfaces/arv
 * Inga macron
 * Inga operatoröverlagringar
 * Ingen dold logik
-* Ingen preprocessor
-* Inget arv
 
 ---
 
@@ -53,7 +51,7 @@ Adam Temmel & Fredrik Kåhre
 ```zig
 const std = @import("std");
 
-pub fn main() !void {
+pub fn main() void {
     std.debug.print("Hello, World!\n", .{});
 }
 ```
@@ -88,7 +86,7 @@ const std = @import("std");
 //                                Felunion borta
 //                                       v
 fn parseIntAndSquare(source: []const u8) u32 {
-    //                           Ersätt eventuella fel med default-värde
+    //          Ersätt eventuella fel med default-värde
     //                                            v
     const int = std.fmt.parseInt(u32, source, 10) catch 0;
     return int * int;
@@ -113,7 +111,7 @@ fn parseIntAndSquare(source: []const u8) u32 {
     //                                            v      v 
     const int = std.fmt.parseInt(u32, source, 10) catch |err| {
         // Hantera felet på önskat vis
-        print("Kan inte konvertera {s} till ett tal, fel: {}\n", .{err, source});
+        print("Kan inte konvertera {s} till ett tal, fel: {}\n", .{source, err});
         unreachable; // Markera att programmet aldrig får ta sig hit
     };
     return int * int;
@@ -127,21 +125,19 @@ fn parseIntAndSquare(source: []const u8) u32 {
 ```zig
 const Knight = struct {
     strength: i32,
-    alive: bool,
 };
 
 const Mage = struct {
     intelligence: i32,
-    alive: bool,
-    staff: ?Staff,
+    staff: ?Staff, // '?' säger att värdet är frivilligt
 };
 
 const Staff = struct {
     level: i32,  
 };
 
-const Character = union(enum) {
-    knight: Knight,
+const Character = union(enum) { // skapar en union utifrån ett enum
+    knight: Knight, // bara ett av dessa fält kan vara aktivt
     mage: Mage,
 };
 ```
@@ -155,13 +151,13 @@ const std = @import("std");
 const print = std.debug.print;
 
 fn printCharacter(c: Character) void {
-    switch(c) {
+    switch(c) { // matcha utifrån vilket fält som är aktivt
         .knight => |k| {
             print("The Knight has {} strength\n", .{k.strength});
         },
         .mage => |m| {
             print("The Mage has {} intelligence\n", .{m.intelligence});
-            if(m.staff) |staff| {
+            if(m.staff) |staff| { // om 'm.staff' inte är null
                 print("The Mage also has a level {} staff\n", .{staff.level});
             }
         },
@@ -174,13 +170,11 @@ fn printCharacter(c: Character) void {
 # Felhantering (pt. 4)
 
 ```zig
-// Definiera egna feltyper
-const TjanstError = error {
+const TjanstError = error { // Definiera egna feltyper
     TjanstASvararInte,
     TjanstBSvararInte,
 };
 ```
-
 ```zig
 //     Explicit deklaration av vilka fel som kan uppstå
 //                          v
@@ -191,10 +185,8 @@ fn arbetaMedTjanster() TjanstError!void {
     if(tjanstB.marDaligt()) {
         return TjanstError.TjanstBSvararInte;
     }
-
     // Gör något med tjänsterna...
 }
-
 ```
 
 ---
@@ -206,9 +198,10 @@ const std = @import("std");
 const print = std.debug.print;
 
 fn funktion() void {
-    arbetaMedTjanster() catch |err| {
-        const tjanst = switch(err) {
-            .TjanstASvararInte => "A",
+    arbetaMedTjanster() catch |err| { // hantera fel
+        // matcha utifrån vilket fel som påträffas
+        const tjanst = switch(err) { // switch fungerar här som ett uttryck
+            .TjanstASvararInte => "A", 
             .TjanstBSvararInte => "B",
         };
         print("Tjanst {s} svarar inte\n", .{tjanst});
@@ -227,7 +220,8 @@ fn parseIntAndSquare(source: []const u8) !u32 {
     return int * int;
 }
 
-test "Exempel med 'try'" {
+// deklaration av ett test
+test "Exempel på test" {
     const int = try parseIntAndSquare("1337");
     try std.testing.expectEqual(1787569, int);
 }
@@ -243,13 +237,12 @@ const std = @import("std");
 fn sumString(comptime str: []const u8) !comptime_int {
     var sum = 0;
     var it = std.mem.tokenize(u8, str, " ");
-    while(it.next()) |slice| {
+    while(it.next()) |slice| { // iterera på sträng separerad av ' '
         sum += try std.fmt.parseInt(i32, slice, 10);
     }
     return sum;
 }
 ```
-
 ```zig
 // du får bara jobba med konstanta värden under comptime
 const str = "1 2 3";
@@ -285,14 +278,11 @@ const rl = @cImport({
 
 pub fn main() void {
     rl.InitWindow(800, 450, "raylib [core] example - basic window");
-    defer rl.CloseWindow();
-
-    ray.SetTargetFPS(60);
-
+    defer rl.CloseWindow(); // utför vid scopets slut
+    rl.SetTargetFPS(60);
     while (!rl.WindowShouldClose()) {
-        ray.BeginDrawing();
+        rl.BeginDrawing();
         defer rl.EndDrawing();
-
         rl.ClearBackground(rl.RAYWHITE);
         rl.DrawText("Hello, World!", 190, 200, 20, rl.LIGHTGRAY);
     }

@@ -49,16 +49,16 @@ pub fn main() !void {
 }
 
 fn handleInputs(ctx: *render.Context, root: md.Root) void {
-    if (c.IsKeyDown(c.KEY_UP)) {
+    if (c.IsKeyDown(c.KEY_UP) or c.IsKeyDown(c.KEY_K)) {
         ctx.scale = @min(render.Context.max_scale, ctx.scale + 0.02);
     }
-    if (c.IsKeyDown(c.KEY_DOWN)) {
+    if (c.IsKeyDown(c.KEY_DOWN) or c.IsKeyDown(c.KEY_J)) {
         ctx.scale = @max(render.Context.min_scale, ctx.scale - 0.02);
     }
-    if (c.IsKeyPressed(c.KEY_LEFT)) {
+    if (c.IsKeyPressed(c.KEY_LEFT) or c.IsKeyDown(c.KEY_H)) {
         render.prevSlide(ctx);
     }
-    if (c.IsKeyPressed(c.KEY_RIGHT)) {
+    if (c.IsKeyPressed(c.KEY_RIGHT) or c.IsKeyDown(c.KEY_L)) {
         render.nextSlide(ctx, root);
     }
 }

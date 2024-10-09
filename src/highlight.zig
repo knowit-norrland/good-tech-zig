@@ -262,6 +262,7 @@ fn isPrimitive(slice: []const u8) bool {
         var primitive_table = std.StaticStringMap(void).initComptime(.{
             .{"bool"},
             .{"void"},
+            .{"comptime_int"},
         });
     };
 
