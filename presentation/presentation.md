@@ -285,4 +285,14 @@ pub fn main() void {
     }
 }
 ```
+---
 
+# Tack för oss!
+
+Kontakt:
+* adam.temmel@knowit.se
+* fredrik.kahre@knowit.se
+
+Länkar:
+* https://knowit-norrland.github.io/zig/  (Presentation)
+* https://github.com/knowit-norrland/good-tech-zig  (Källkod)

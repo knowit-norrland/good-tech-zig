@@ -67,13 +67,13 @@ pub const Context = struct {
             @max(
                 regular_font_size,
                 header_font_size,
-            ) * max_scale,
+            ),
             &ctx.codepoints,
         );
         ctx.code_font = rl.loadFontFromMemory(
             ".ttf",
             mono_space_font,
-            code_font_size * max_scale,
+            code_font_size,
             &ctx.codepoints,
         );
         // gör textens kanter lite finare vid skalning (men påverkar såklart prestanda)
@@ -138,6 +138,12 @@ pub fn currentSlideImpl(ctx: *Context, root: md.Root) !void {
             .codeblock => |codeblock| try renderCodeblock(ctx, codeblock),
         }
     }
+
+    const str = slideNrStr(ctx.current_slide_idx + 1, root.slides.len);
+    const rect = rl.measureTextEx(ctx.regular_font, str, @floatFromInt(regular_font_size), 0);
+    const x: f32 = @as(f32, @floatFromInt(rl.getRenderWidth())) - rect.x - 8;
+    const y: f32 = @as(f32, @floatFromInt(rl.getRenderHeight())) - rect.y;
+    drawStr(ctx, str, x, y, regular_font_size, color_fg, ctx.regular_font);
 }
 
 pub fn nextSlide(ctx: *Context, root: md.Root) void {
@@ -270,8 +276,6 @@ fn renderCodeblock(ctx: *Context, codeblock: md.Codeblock) !void {
         ctx.y += code_font_size;
         ctx.x = left_margin;
     }
-
-    //drawStr(ctx, codeblock.code, ctx.x, ctx.y, code_font_size, color_fg, ctx.code_font);
 }
 
 fn bounds(ctx: *const Context, nodes: []const md.Node) rl.Vector2 {
@@ -385,10 +389,17 @@ fn workingDirFromPath(path: []const u8) []const u8 {
     return path[0 .. idx + 1];
 }
 
+fn slideNrStr(current: usize, total: usize) [:0]const u8 {
+    const static = struct {
+        var buffer: [128]u8 = undefined;
+    };
+    return std.fmt.bufPrintZ(&static.buffer, "{}/{}", .{ current, total }) catch unreachable;
+}
+
 // bekvämlighet för att skapa nullterminerade strängar
 fn strZ(str: []const u8) [:0]const u8 {
     const static = struct {
-        var buffer: [2048]u8 = .{0} ** 2048;
+        var buffer: [2048]u8 = undefined;
     };
     return std.fmt.bufPrintZ(&static.buffer, "{s}", .{str}) catch unreachable;
 }
