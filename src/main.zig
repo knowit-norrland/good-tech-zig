@@ -1,64 +1,57 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const rl = @import("raylib");
 const md = @import("md.zig");
 const render = @import("render.zig");
-const c = @cImport({
-    @cInclude("raylib.h");
-});
+const web = @import("web.zig");
+const build_options = @import("build_options");
+
+const presentation_file = build_options.present;
+const presentation_source = @embedFile(presentation_file);
+
+const web_build = builtin.target.os.tag == .emscripten;
 
 pub fn main() !void {
-    var base_allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    defer std.debug.assert(base_allocator.deinit() == .ok);
+    var base_allocator = if (web_build) web.WebAllocator{} else std.heap.GeneralPurposeAllocator(.{}){};
+    defer if (!web_build) std.debug.assert(base_allocator.deinit() == .ok);
     const ally = base_allocator.allocator();
 
     var arena = std.heap.ArenaAllocator.init(ally);
     defer arena.deinit();
     const arena_ally = arena.allocator();
 
-    const args = try std.process.argsAlloc(arena_ally);
+    const root = try md.parse(presentation_source, arena_ally);
 
-    var file: []const u8 = "";
+    const width = rl.getMonitorWidth(rl.getCurrentMonitor());
+    const height = rl.getMonitorHeight(rl.getCurrentMonitor());
 
-    if (args.len >= 2) {
-        file = args[1];
-    } else {
-        std.debug.print("No file specified, exiting...", .{});
-        return;
-    }
+    rl.setTraceLogLevel(.log_warning);
+    rl.initWindow(width, height, "Presentation");
+    defer rl.closeWindow();
+    rl.setTargetFPS(60);
 
-    const src = try std.fs.cwd().readFileAlloc(arena_ally, file, 1_000_000_000);
-    const root = try md.parse(src, arena_ally);
-
-    const width = c.GetMonitorWidth(c.GetCurrentMonitor());
-    const height = c.GetMonitorHeight(c.GetCurrentMonitor());
-
-    c.SetTraceLogLevel(c.LOG_WARNING);
-    c.InitWindow(width, height, "Presentation");
-    defer c.CloseWindow();
-    c.SetTargetFPS(60);
-
-    var ctx = try render.Context.init(arena_ally, root, file);
+    var ctx = try render.Context.init(arena_ally, root, presentation_file);
     defer ctx.deinit();
 
-    while (!c.WindowShouldClose()) {
+    while (!rl.windowShouldClose()) {
         handleInputs(&ctx, root);
-        c.BeginDrawing();
+        rl.beginDrawing();
+        defer rl.endDrawing();
         try render.currentSlide(&ctx, root);
-        c.EndDrawing();
     }
 }
 
 fn handleInputs(ctx: *render.Context, root: md.Root) void {
-    if (c.IsKeyDown(c.KEY_UP) or c.IsKeyDown(c.KEY_K)) {
+    if (rl.isKeyDown(.key_up) or rl.isKeyDown(.key_k)) {
         ctx.scale = @min(render.Context.max_scale, ctx.scale + 0.02);
     }
-    if (c.IsKeyDown(c.KEY_DOWN) or c.IsKeyDown(c.KEY_J)) {
+    if (rl.isKeyDown(.key_down) or rl.isKeyDown(.key_j)) {
         ctx.scale = @max(render.Context.min_scale, ctx.scale - 0.02);
     }
-    if (c.IsKeyPressed(c.KEY_LEFT) or c.IsKeyDown(c.KEY_H)) {
+    if (rl.isKeyPressed(.key_left) or rl.isKeyDown(.key_h)) {
         render.prevSlide(ctx);
     }
-    if (c.IsKeyPressed(c.KEY_RIGHT) or c.IsKeyDown(c.KEY_L)) {
+    if (rl.isKeyPressed(.key_right) or rl.isKeyDown(.key_l)) {
         render.nextSlide(ctx, root);
     }
 }

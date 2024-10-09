@@ -1,0 +1,2 @@
+#!/bin/sh
+~/bin/zig build -Dtarget=wasm32-emscripten --sysroot "/usr/lib/emsdk/upstream/emscripten"

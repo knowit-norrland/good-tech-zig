@@ -1,8 +1,6 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-//TODO: kommentarer, siffror, typer
-
 pub const Token = struct {
     pub const Kind = enum {
         keyword,
@@ -139,7 +137,7 @@ pub fn line(ally: std.mem.Allocator, src: []const u8) !Tokens {
             });
         } else if (token_slice.len == 0 and isWhitespace(ctx.get())) {
             // konvertera tabbar till blanksteg
-            const iterations: u64 = if (ctx.get() == '\t') 4 else 1;
+            const iterations: usize = if (ctx.get() == '\t') 4 else 1;
 
             for (0..iterations) |_| {
                 ctx.next();
@@ -252,17 +250,18 @@ fn isNumber(slice: []const u8) bool {
 }
 
 fn isPrimitive(slice: []const u8) bool {
-    if (slice[0] == 'u' or slice[0] == 'i' or slice[0] == 'f') {
+    if ((slice[0] == 'u' or slice[0] == 'i' or slice[0] == 'f') and !std.mem.eql(u8, "usize", slice) and slice.len > 1) {
         if (isNumber(slice[1..])) {
             return true;
         }
     }
 
     const static = struct {
-        var primitive_table = std.StaticStringMap(void).initComptime(.{
+        const primitive_table = std.StaticStringMap(void).initComptime(.{
             .{"bool"},
             .{"void"},
             .{"comptime_int"},
+            .{"usize"},
         });
     };
 

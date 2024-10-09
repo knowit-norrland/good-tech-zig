@@ -136,8 +136,8 @@ const Staff = struct {
     level: i32,  
 };
 
-const Character = union(enum) { // skapar en union utifrån ett enum
-    knight: Knight, // bara ett av dessa fält kan vara aktivt
+const Character = union(enum) { // Skapar en union utifrån ett enum
+    knight: Knight, // Bara ett av dessa fält kan vara aktivt
     mage: Mage,
 };
 ```
@@ -151,13 +151,13 @@ const std = @import("std");
 const print = std.debug.print;
 
 fn printCharacter(c: Character) void {
-    switch(c) { // matcha utifrån vilket fält som är aktivt
+    switch(c) { // Matcha utifrån vilket fält som är aktivt
         .knight => |k| {
             print("The Knight has {} strength\n", .{k.strength});
         },
         .mage => |m| {
             print("The Mage has {} intelligence\n", .{m.intelligence});
-            if(m.staff) |staff| { // om 'm.staff' inte är null
+            if(m.staff) |staff| { // Om 'm.staff' inte är null
                 print("The Mage also has a level {} staff\n", .{staff.level});
             }
         },
@@ -198,9 +198,9 @@ const std = @import("std");
 const print = std.debug.print;
 
 fn funktion() void {
-    arbetaMedTjanster() catch |err| { // hantera fel
-        // matcha utifrån vilket fel som påträffas
-        const tjanst = switch(err) { // switch fungerar här som ett uttryck
+    arbetaMedTjanster() catch |err| { // Hantera fel
+        // Matcha utifrån vilket fel som påträffas
+        const tjanst = switch(err) { // Switch fungerar här som ett uttryck
             .TjanstASvararInte => "A", 
             .TjanstBSvararInte => "B",
         };
@@ -220,7 +220,7 @@ fn parseIntAndSquare(source: []const u8) !u32 {
     return int * int;
 }
 
-// deklaration av ett test
+// Deklaration av ett test
 test "Exempel på test" {
     const int = try parseIntAndSquare("1337");
     try std.testing.expectEqual(1787569, int);
@@ -232,24 +232,21 @@ test "Exempel på test" {
 # Comptime
 
 ```zig
-const std = @import("std");
-
-fn sumString(comptime str: []const u8) !comptime_int {
-    var sum = 0;
-    var it = std.mem.tokenize(u8, str, " ");
-    while(it.next()) |slice| { // iterera på sträng separerad av ' '
-        sum += try std.fmt.parseInt(i32, slice, 10);
+fn generateFibonacci(comptime n: usize) [n]u64 {
+    @setEvalBranchQuota(10000); // Begränsa antalet beräkningar
+    comptime var fibs: [n]u64 = undefined;
+    comptime var i: usize = 0;
+    inline while (i < n) : (i += 1) {
+        fibs[i] = switch (i) {
+            0, 1 => 1,
+            else => fibs[i-1] + fibs[i-2],
+        };
     }
-    return sum;
+    return fibs;
 }
-```
-```zig
-// du får bara jobba med konstanta värden under comptime
-const str = "1 2 3";
-//   beräkna summan under kompileringssteget
-//              v
-const sum = comptime try sumString(str);
-std.debug.print("Summan av {s} är {}", .{str, sum});
+
+// Skapa en lista av de 10 första talen i Fibonacci-serien
+const fib10 = generateFibonacci(10); 
 ```
 
 ---

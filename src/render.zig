@@ -1,12 +1,10 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const md = @import("md.zig");
 const hi = @import("highlight.zig");
+const rl = @import("raylib");
 
-const c = @cImport({
-    @cInclude("raylib.h");
-});
-
-const TextureTable = std.StringHashMap(c.Texture2D);
+const TextureTable = std.StringHashMap(rl.Texture2D);
 
 const regular_font_data = @embedFile("./inter.ttf");
 const mono_space_font = @embedFile("./JetBrainsMono.ttf");
@@ -33,8 +31,8 @@ pub const Context = struct {
     pub const max_scale = 2.5;
     pub const min_scale = 0.5;
 
-    regular_font: c.Font,
-    code_font: c.Font,
+    regular_font: rl.Font,
+    code_font: rl.Font,
     codepoints: [n_codepoints]i32,
     x: f32 = 0,
     y: f32 = 0,
@@ -62,29 +60,25 @@ pub const Context = struct {
         inline for (0..n_codepoints) |i| {
             ctx.codepoints[i] = i;
         }
-        ctx.regular_font = c.LoadFontFromMemory(
+        ctx.regular_font = rl.loadFontFromMemory(
             ".ttf",
-            regular_font_data.ptr,
-            regular_font_data.len,
+            regular_font_data,
             // glöm inte bort att föra in eventuellt nya fontstorlekar här också...
             @max(
                 regular_font_size,
                 header_font_size,
             ) * max_scale,
-            (&ctx.codepoints).ptr,
-            n_codepoints,
+            &ctx.codepoints,
         );
-        ctx.code_font = c.LoadFontFromMemory(
+        ctx.code_font = rl.loadFontFromMemory(
             ".ttf",
-            mono_space_font.ptr,
-            mono_space_font.len,
+            mono_space_font,
             code_font_size * max_scale,
-            (&ctx.codepoints).ptr,
-            n_codepoints,
+            &ctx.codepoints,
         );
         // gör textens kanter lite finare vid skalning (men påverkar såklart prestanda)
-        c.SetTextureFilter(ctx.regular_font.texture, c.TEXTURE_FILTER_ANISOTROPIC_4X);
-        c.SetTextureFilter(ctx.code_font.texture, c.TEXTURE_FILTER_ANISOTROPIC_4X);
+        rl.setTextureFilter(ctx.regular_font.texture, .texture_filter_anisotropic_4x);
+        rl.setTextureFilter(ctx.code_font.texture, .texture_filter_anisotropic_4x);
 
         var buf: [512]u8 = undefined;
         const dir = workingDirFromPath(path);
@@ -97,8 +91,8 @@ pub const Context = struct {
                             continue;
                         }
                         const c_slice = try std.fmt.bufPrintZ(&buf, "{s}{s}", .{ dir, img.filename });
-                        const loaded_texture = c.LoadTexture(c_slice);
-                        c.SetTextureFilter(loaded_texture, c.TEXTURE_FILTER_BILINEAR);
+                        const loaded_texture = rl.loadTexture(c_slice);
+                        rl.setTextureFilter(loaded_texture, .texture_filter_bilinear);
                         try ctx.texture_table.put(img.filename, loaded_texture);
                     },
                     else => {},
@@ -112,7 +106,7 @@ pub const Context = struct {
     pub fn deinit(ctx: *const Context) void {
         var it = ctx.texture_table.valueIterator();
         while (it.next()) |texture| {
-            c.UnloadTexture(texture.*);
+            rl.unloadTexture(texture.*);
         }
     }
 };
@@ -122,8 +116,8 @@ pub fn currentSlide(ctx: *Context, root: md.Root) !void {
     _ = ctx.frame_arena.reset(.retain_capacity);
     const nodes = root.slides[ctx.current_slide_idx];
     const b = bounds(ctx, nodes);
-    ctx.x = @as(f32, @floatFromInt(c.GetRenderWidth())) / 2 - b.x / 2;
-    ctx.y = @as(f32, @floatFromInt(c.GetRenderHeight())) / 2 - b.y / 2;
+    ctx.x = @as(f32, @floatFromInt(rl.getRenderWidth())) / 2 - b.x / 2;
+    ctx.y = @as(f32, @floatFromInt(rl.getRenderHeight())) / 2 - b.y / 2;
     ctx.y /= ctx.scale;
     try currentSlideImpl(ctx, root);
 }
@@ -133,7 +127,7 @@ pub fn currentSlideImpl(ctx: *Context, root: md.Root) !void {
 
     handleAnimationStep(ctx);
 
-    c.ClearBackground(color_bg);
+    rl.clearBackground(color_bg);
 
     for (nodes) |node| {
         switch (node) {
@@ -230,7 +224,7 @@ fn renderImage(ctx: *Context, i: md.Image) void {
     const ptr = ctx.texture_table.getPtr(i.filename);
     std.debug.assert(ptr != null);
     defer ctx.y += @floatFromInt(ptr.?.height);
-    drawImg(ctx, ptr.?.*, ctx.x, ctx.y, c.WHITE);
+    drawImg(ctx, ptr.?.*, ctx.x, ctx.y, rl.Color.white);
 }
 
 fn renderCodeblock(ctx: *Context, codeblock: md.Codeblock) !void {
@@ -280,7 +274,7 @@ fn renderCodeblock(ctx: *Context, codeblock: md.Codeblock) !void {
     //drawStr(ctx, codeblock.code, ctx.x, ctx.y, code_font_size, color_fg, ctx.code_font);
 }
 
-fn bounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
+fn bounds(ctx: *const Context, nodes: []const md.Node) rl.Vector2 {
     const b = nodesBounds(ctx, nodes);
     return .{
         .x = b.x * ctx.scale,
@@ -288,7 +282,7 @@ fn bounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
     };
 }
 
-fn nodesBounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
+fn nodesBounds(ctx: *const Context, nodes: []const md.Node) rl.Vector2 {
     var w: f32 = 0;
     var height: f32 = 0;
 
@@ -313,7 +307,7 @@ fn nodesBounds(ctx: *const Context, nodes: []const md.Node) c.Vector2 {
     };
 }
 
-fn imgBounds(ctx: *const Context, img: md.Image) c.Vector2 {
+fn imgBounds(ctx: *const Context, img: md.Image) rl.Vector2 {
     const ptr = ctx.texture_table.getPtr(img.filename);
     std.debug.assert(ptr != null);
     return .{
@@ -326,14 +320,14 @@ fn imgBounds(ctx: *const Context, img: md.Image) c.Vector2 {
 // tanken är att funktionerna för att rendera konstruktionerna nyttjar
 // den här funktionen, så löser sig problem med skalning/dylikt på en
 // gemensam punkt
-fn drawStr(ctx: *const Context, str: []const u8, x: f32, y: f32, h: f32, color: c.Color, font: c.Font) void {
+fn drawStr(ctx: *const Context, str: []const u8, x: f32, y: f32, h: f32, color: rl.Color, font: rl.Font) void {
     const slice = strZ(str);
     var alpha_applied_color = color;
     alpha_applied_color.a = @intFromFloat(ctx.alpha * @as(f32, @floatFromInt(color.a)));
-    c.DrawTextEx(
+    rl.drawTextEx(
         font,
         slice,
-        c.Vector2{
+        rl.Vector2{
             .x = x,
             .y = y * ctx.scale,
         },
@@ -343,35 +337,35 @@ fn drawStr(ctx: *const Context, str: []const u8, x: f32, y: f32, h: f32, color: 
     );
 }
 
-fn drawCircle(ctx: *const Context, radius: f32, color: c.Color) void {
+fn drawCircle(ctx: *const Context, radius: f32, color: rl.Color) void {
     var alpha_applied_color = color;
     alpha_applied_color.a = @intFromFloat(ctx.alpha * @as(f32, @floatFromInt(color.a)));
-    c.DrawCircleV(.{
+    rl.drawCircleV(.{
         .x = (ctx.x + radius),
         .y = (ctx.y + radius) * ctx.scale,
     }, radius * ctx.scale, alpha_applied_color);
 }
 
-fn drawCodeBackground(ctx: *const Context, textsize: c.Vector2) void {
+fn drawCodeBackground(ctx: *const Context, textsize: rl.Vector2) void {
     var alpha_applied_color = color_cb;
     alpha_applied_color.a = @intFromFloat(ctx.alpha * @as(f32, @floatFromInt(color_cb.a)));
     const padding_x = 32 * ctx.scale;
     const padding_y = 16 * ctx.scale;
-    const rect = c.Rectangle{
+    const rect = rl.Rectangle{
         .x = (ctx.x - padding_x),
         .y = (ctx.y * ctx.scale - padding_y),
         .width = (textsize.x * ctx.scale + 2 * padding_x),
         .height = (textsize.y * ctx.scale + 2 * padding_y),
     };
-    c.DrawRectangleRounded(rect, 0.05, 1, alpha_applied_color);
+    rl.drawRectangleRounded(rect, 0.05, 1, alpha_applied_color);
 }
 
-fn drawImg(ctx: *const Context, texture: c.Texture2D, x: f32, y: f32, color: c.Color) void {
+fn drawImg(ctx: *const Context, texture: rl.Texture2D, x: f32, y: f32, color: rl.Color) void {
     var alpha_applied_color = color;
     alpha_applied_color.a = @intFromFloat(ctx.alpha * @as(f32, @floatFromInt(color.a)));
-    c.DrawTextureEx(
+    rl.drawTextureEx(
         texture,
-        c.Vector2{
+        rl.Vector2{
             .x = x,
             .y = y * ctx.scale,
         },
@@ -381,9 +375,9 @@ fn drawImg(ctx: *const Context, texture: c.Texture2D, x: f32, y: f32, color: c.C
     );
 }
 
-fn strBounds(str: []const u8, font: *const c.Font, font_height: i32) c.Vector2 {
+fn strBounds(str: []const u8, font: *const rl.Font, font_height: i32) rl.Vector2 {
     const slice = strZ(str);
-    return c.MeasureTextEx(font.*, slice, @floatFromInt(font_height), 0);
+    return rl.measureTextEx(font.*, slice, @floatFromInt(font_height), 0);
 }
 
 fn workingDirFromPath(path: []const u8) []const u8 {
@@ -399,7 +393,7 @@ fn strZ(str: []const u8) [:0]const u8 {
     return std.fmt.bufPrintZ(&static.buffer, "{s}", .{str}) catch unreachable;
 }
 
-fn hex(code: u24) c.Color {
+fn hex(code: u24) rl.Color {
     return .{
         .r = @intCast((code & 0xFF0000) >> 16),
         .g = @intCast((code & 0x00FF00) >> 8),
@@ -411,7 +405,7 @@ fn hex(code: u24) c.Color {
 test "test hex conversion" {
     const expectEqual = std.testing.expectEqual;
 
-    try expectEqual(c.Color{
+    try expectEqual(rl.Color{
         .r = 58,
         .g = 51,
         .b = 53,
