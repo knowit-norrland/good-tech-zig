@@ -58,6 +58,25 @@ pub fn main() void {
 
 ---
 
+# Grundläggande typer
+
+```zig
+u8  // byte
+i32 // int
+f32 // float
+f64 // double
+```
+```zig
+[]u8       // "slice av bytes" (sträng)
+[]const u8 // "slice av bytes för läsning"
+```
+```zig
+u21 // Ok, får skapa "egna" avgränsingar mellan 1-65535 bitar
+i34 // Också ok
+```
+
+---
+
 # Felhantering
 
 ```zig

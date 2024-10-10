@@ -1,2 +1,2 @@
 #!/bin/sh
-~/bin/zig build -Dtarget=wasm32-emscripten --sysroot "/usr/lib/emsdk/upstream/emscripten"
+~/bin/zig build -Dtarget=wasm32-emscripten --sysroot "/usr/lib/emsdk/upstream/emscripten" -Dpresent="presentation/presentation.md" -Doptimize=ReleaseSmall

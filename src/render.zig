@@ -4,6 +4,8 @@ const md = @import("md.zig");
 const hi = @import("highlight.zig");
 const rl = @import("raylib");
 
+const logo_data = @embedFile("./knowit.png");
+
 const TextureTable = std.StringHashMap(rl.Texture2D);
 
 const regular_font_data = @embedFile("./inter.ttf");
@@ -44,12 +46,14 @@ pub const Context = struct {
     animation_begin_timestamp: i64 = 0,
     texture_table: TextureTable,
     frame_arena: std.heap.ArenaAllocator,
+    logo: rl.Texture2D,
 
     pub fn init(ally: std.mem.Allocator, root: md.Root, path: []const u8) !Context {
         var ctx = Context{
             .regular_font = undefined,
             .code_font = undefined,
             .codepoints = undefined,
+            .logo = undefined,
             .texture_table = TextureTable.init(ally),
             .frame_arena = std.heap.ArenaAllocator.init(ally),
         };
@@ -100,6 +104,10 @@ pub const Context = struct {
             }
         }
 
+        const img = rl.loadImageFromMemory(".png", logo_data);
+        defer rl.unloadImage(img);
+        ctx.logo = rl.loadTextureFromImage(img);
+
         return ctx;
     }
 
@@ -108,6 +116,7 @@ pub const Context = struct {
         while (it.next()) |texture| {
             rl.unloadTexture(texture.*);
         }
+        rl.unloadTexture(ctx.logo);
     }
 };
 
@@ -139,11 +148,42 @@ pub fn currentSlideImpl(ctx: *Context, root: md.Root) !void {
         }
     }
 
-    const str = slideNrStr(ctx.current_slide_idx + 1, root.slides.len);
-    const rect = rl.measureTextEx(ctx.regular_font, str, @floatFromInt(regular_font_size), 0);
-    const x: f32 = @as(f32, @floatFromInt(rl.getRenderWidth())) - rect.x - 8;
-    const y: f32 = @as(f32, @floatFromInt(rl.getRenderHeight())) - rect.y;
-    drawStr(ctx, str, x, y, regular_font_size, color_fg, ctx.regular_font);
+    // sidnumrering
+    {
+        const str = slideNrStr(ctx.current_slide_idx + 1, root.slides.len);
+        const rect = rl.measureTextEx(ctx.regular_font, str, @floatFromInt(regular_font_size), 0);
+        const x: f32 = @as(f32, @floatFromInt(rl.getRenderWidth())) - rect.x - 8;
+        const y: f32 = @as(f32, @floatFromInt(rl.getRenderHeight())) - rect.y;
+        rl.drawTextEx(
+            ctx.regular_font,
+            str,
+            rl.Vector2{
+                .x = x,
+                .y = y,
+            },
+            rect.y,
+            0,
+            color_fg,
+        );
+    }
+
+    // knowit-logga i hörnet
+    {
+        const scale = 0.5;
+        const h: f32 = @floatFromInt(ctx.logo.height);
+        const x: f32 = 8;
+        const y: f32 = @as(f32, @floatFromInt(rl.getRenderHeight())) - h * scale;
+        rl.drawTextureEx(
+            ctx.logo,
+            rl.Vector2{
+                .x = x,
+                .y = y,
+            },
+            0,
+            scale,
+            rl.Color.white,
+        );
+    }
 }
 
 pub fn nextSlide(ctx: *Context, root: md.Root) void {
