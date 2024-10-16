@@ -1,5 +1,5 @@
 # Introduktion till Zig
-!(knowit.png)
+!(knowit-zig.png)
 Adam Temmel & Fredrik Kåhre
 
 ---
@@ -7,7 +7,6 @@ Adam Temmel & Fredrik Kåhre
 # Om oss
 
 * Konsulter från Knowit
-* Bolagsverket
 * Java & Vue
 
 ---
@@ -315,3 +314,9 @@ Kontakt:
 Länkar:
 * https://knowit-norrland.github.io/zig/  (Presentation)
 * https://github.com/knowit-norrland/good-tech-zig  (Källkod)
+
+---
+
+# Synpunkter
+
+!(qr.png)
